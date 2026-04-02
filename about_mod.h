@@ -2,6 +2,10 @@
 
 #include <Arduino.h>
 
+#ifndef APP_VERSION
+#define APP_VERSION "emulator"
+#endif
+
 extern MENU setting_menu_root[];
 extern const uint8_t SET_ROOT_N;
 extern UiU8g2 u8g2;
@@ -38,13 +42,13 @@ uint8_t curMenuN = SET_ROOT_N;
 
 static inline void about_rebuild_lines_light()
 {
-    std::snprintf(about_line_version, sizeof(about_line_version), "Version: emulator");
+    std::snprintf(about_line_version, sizeof(about_line_version), "Version: %s", APP_VERSION);
     std::snprintf(about_line_board, sizeof(about_line_board), "Board: desktop");
     std::snprintf(about_line_ram_static, sizeof(about_line_ram_static), "Static RAM: n/a");
     std::snprintf(about_line_ram_heap, sizeof(about_line_ram_heap), "Heap: %u KB", (unsigned)(ESP.getFreeHeap() / 1024));
-    std::snprintf(about_line_flash, sizeof(about_line_flash), "Flash: desktop");
+    std::snprintf(about_line_flash, sizeof(about_line_flash), "Flash: host");
     std::snprintf(about_line_freq, sizeof(about_line_freq), "Freq: host");
-    std::snprintf(about_line_creator, sizeof(about_line_creator), "Creator: emulator");
+    std::snprintf(about_line_creator, sizeof(about_line_creator), "Creator: GDDAM");
 }
 
 static inline void about_tick_refresh(uint32_t nowMs)

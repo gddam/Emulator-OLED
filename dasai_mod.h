@@ -13,6 +13,8 @@
 #include "LittleFS.h"
 #include "secure_pak.h"
 #include "splash.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 extern UiU8g2 u8g2;
 extern bool pageDirty;
@@ -90,6 +92,15 @@ bool sdMounted = false;
 bool sdPresent = false;
 bool g_fwUiDirty = false;
 bool g_isPlaying = false;
+
+TaskHandle_t sdHotplugTask = nullptr;
+
+static void sd_hotplug_task(void *param)
+{
+    (void)param;
+    sdHotplugTask = nullptr;
+    vTaskDelete(nullptr);
+}
 
 static constexpr int16_t SD_ICON_X_TARGET = 116;
 static constexpr int16_t SD_ICON_X_FROM_RIGHT = 138;

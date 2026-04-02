@@ -35,6 +35,9 @@ target_compile_definitions(WouoUI PRIVATE WOUOUI_EMULATOR=1 SDL_MAIN_HANDLED=1 W
 
 
 target_link_libraries(WouoUI ${WOUOUI_SDL_LIBS} crypto)
+if(WIN32 OR MINGW OR CMAKE_SYSTEM_NAME STREQUAL "MSYS")
+    target_link_libraries(WouoUI ws2_32)
+endif()
 
 if(WIN32 OR MINGW OR CMAKE_SYSTEM_NAME STREQUAL "MSYS")
     get_filename_component(WOUOUI_MINGW_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)

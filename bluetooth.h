@@ -59,6 +59,7 @@ struct Navigation
     String eta = "12:34";
     String duration = "02 min";
     uint8_t icon[288] = {0};
+    uint32_t iconCRC = 0;
 };
 
 class ChronosESP32
@@ -161,6 +162,7 @@ static constexpr uint16_t BT_BRIDGE_UDP_PORT = 9233;
 static constexpr uint32_t BT_BRIDGE_CONN_TIMEOUT_MS = 7000;
 static uint32_t g_btBridgeLastRxMs = 0;
 static std::deque<Notification> g_btNotifQueue;
+static uint8_t g_navIconPending[288] = {0};
 static uint32_t g_navIconAssembleCrc = 0;
 static uint8_t g_navIconAssembleMask = 0;
 
@@ -323,6 +325,9 @@ static inline void bt_apply_bridge_line(char *line)
         {
             g_navActive = false;
             g_nav.active = false;
+            g_nav.iconCRC = 0;
+            memset(g_nav.icon, 0, sizeof(g_nav.icon));
+            memset(g_navIconPending, 0, sizeof(g_navIconPending));
             g_navIconAssembleMask = 0;
         }
         chronos_mark_dirty();
@@ -374,22 +379,29 @@ static inline void bt_apply_bridge_line(char *line)
             return;
 
         const uint32_t crc = static_cast<uint32_t>(std::strtoul(f[2] ? f[2] : "0", nullptr, 16));
-        const size_t offset = static_cast<size_t>(pos) * sizeof(chunk);
-        memcpy(g_nav.icon + offset, chunk, sizeof(chunk));
 
-        // Satu icon nav dikirim dalam 3 potongan (pos 0..2).
-        // Terapkan CRC/icon baru hanya saat semua potongan untuk CRC ini sudah lengkap,
-        // supaya render tidak "setengah icon".
+        // Saat CRC baru datang, mulai icon baru dari buffer kosong agar tidak
+        // tercampur sisa chunk icon sebelumnya.
         if (crc != g_navIconAssembleCrc)
         {
             g_navIconAssembleCrc = crc;
             g_navIconAssembleMask = 0;
+            memset(g_navIconPending, 0, sizeof(g_navIconPending));
         }
+
+        const size_t offset = static_cast<size_t>(pos) * sizeof(chunk);
+        memcpy(g_navIconPending + offset, chunk, sizeof(chunk));
+
+        // Satu icon nav dikirim dalam 3 potongan (pos 0..2).
+        // Terapkan CRC/icon baru hanya saat semua potongan untuk CRC ini sudah lengkap,
+        // supaya render tidak "setengah icon".
         g_navIconAssembleMask |= static_cast<uint8_t>(1u << static_cast<unsigned>(pos));
 
         if (g_navIconAssembleMask == 0x07u)
         {
+            memcpy(g_nav.icon, g_navIconPending, sizeof(g_nav.icon));
             g_navCrc = crc;
+            g_nav.iconCRC = crc;
             g_navIconAssembleMask = 0;
             chronos_mark_dirty();
         }
@@ -404,7 +416,9 @@ static inline void bt_apply_bridge_line(char *line)
 
         const uint32_t crc = static_cast<uint32_t>(std::strtoul(f[1] ? f[1] : "0", nullptr, 16));
         memcpy(g_nav.icon, fullIcon, sizeof(fullIcon));
+        memcpy(g_navIconPending, fullIcon, sizeof(fullIcon));
         g_navCrc = crc;
+        g_nav.iconCRC = crc;
         g_navIconAssembleMask = 0;
         g_navIconAssembleCrc = crc;
         chronos_mark_dirty();
@@ -426,7 +440,7 @@ static inline void bt_bridge_poll_udp()
     if (!bt_bridge::init_socket())
         return;
 
-    char buf[1024];
+    char buf[2048];
     for (;;)
     {
         sockaddr_in from{};
@@ -543,6 +557,7 @@ static inline void chronos_loop()
     {
         g_connected = false;
         g_navActive = false;
+        g_nav.iconCRC = 0;
     }
 }
 

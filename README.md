@@ -29,6 +29,7 @@ Contoh cepat dari PowerShell: <br />
 # **Chronos App via Bluetooth PC (Bridge BLE) :** <br />
 Untuk konek langsung dari aplikasi Chronos di HP ke emulator, jalankan bridge BLE di PC: <br />
 `dotnet run --project ../tools/ChronosBleBridge/ChronosBleBridge.csproj -c Release` <br />
+Opsional debug: `CHRONOS_BRIDGE_SYNTHETIC_NAV_ICON=1 dotnet run --project ../tools/ChronosBleBridge/ChronosBleBridge.csproj -c Release` untuk memaksa icon sintetis. <br />
 
 Urutan pakai: <br />
 1. Jalankan `Emulator.exe` <br />
@@ -40,3 +41,4 @@ Nama BLE yang di-broadcast oleh bridge: `DASAI Bridge` <br />
 
 Jika bridge menampilkan `RadioNotAvailable`, aktifkan Bluetooth di Windows atau gunakan adapter yang mendukung BLE peripheral role. <br />
 Catatan: render icon navigation pada emulator memakai direct update (tanpa swap animation) agar tidak muncul artefak ghost saat stream BLE. <br />
+Secara default bridge sekarang meneruskan icon navigasi raw dari Chronos, jadi panah emulator harus sama dengan OLED ESP32. <br />

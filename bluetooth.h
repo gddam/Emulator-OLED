@@ -12,6 +12,7 @@
 #include <ctime>
 #include <cstdint>
 #include <cstdio>
+#include <cctype>
 #include <cstring>
 #include <deque>
 
@@ -160,6 +161,7 @@ Navigation g_nav;
 
 static constexpr uint16_t BT_BRIDGE_UDP_PORT = 9233;
 static constexpr uint32_t BT_BRIDGE_CONN_TIMEOUT_MS = 7000;
+static constexpr bool BT_BRIDGE_NAVICON_REQUIRE_FULL = true;
 static uint32_t g_btBridgeLastRxMs = 0;
 static std::deque<Notification> g_btNotifQueue;
 static uint8_t g_navIconPending[288] = {0};
@@ -304,6 +306,20 @@ static inline bool bt_parse_hex_bytes(const char *hex, uint8_t *out, size_t outL
     return true;
 }
 
+static inline bool bt_ieq_ascii(const char *a, const char *b)
+{
+    if (!a || !b)
+        return false;
+    while (*a && *b)
+    {
+        const unsigned char ca = static_cast<unsigned char>(*a++);
+        const unsigned char cb = static_cast<unsigned char>(*b++);
+        if (std::tolower(ca) != std::tolower(cb))
+            return false;
+    }
+    return (*a == '\0' && *b == '\0');
+}
+
 static inline void bt_apply_bridge_line(char *line)
 {
     if (!line || !line[0])
@@ -325,8 +341,6 @@ static inline void bt_apply_bridge_line(char *line)
         {
             g_navActive = false;
             g_nav.active = false;
-            g_nav.iconCRC = 0;
-            memset(g_nav.icon, 0, sizeof(g_nav.icon));
             memset(g_navIconPending, 0, sizeof(g_navIconPending));
             g_navIconAssembleMask = 0;
         }
@@ -355,15 +369,29 @@ static inline void bt_apply_bridge_line(char *line)
         return;
     }
 
-    if (std::strcmp(f[0], "NAV") == 0 && n >= 7)
+    if (std::strcmp(f[0], "NAV") == 0 && n >= 2)
     {
-        g_navActive = (std::atoi(f[1]) != 0);
+        bool navActive = (std::atoi(f[1]) != 0);
+        // Defensive fallback: some bridge builds may still send NAV active=1
+        // while textual state is already Inactive/Disabled.
+        if (navActive && n >= 7)
+        {
+            const char *state = f[6] ? f[6] : "";
+            if (bt_ieq_ascii(state, "inactive") || bt_ieq_ascii(state, "disabled"))
+                navActive = false;
+        }
+        g_navActive = navActive;
         g_nav.active = g_navActive;
-        g_nav.title = f[2] ? f[2] : "";
-        g_nav.directions = f[3] ? f[3] : "";
-        g_nav.distance = f[4] ? f[4] : "";
-        g_nav.eta = f[5] ? f[5] : "";
-        g_nav.duration = f[6] ? f[6] : "";
+        if (n >= 3 && f[2] && f[2][0] != '\0')
+            g_nav.title = f[2];
+        if (n >= 4 && f[3] && f[3][0] != '\0')
+            g_nav.directions = f[3];
+        if (n >= 5 && f[4] && f[4][0] != '\0')
+            g_nav.distance = f[4];
+        if (n >= 6 && f[5] && f[5][0] != '\0')
+            g_nav.eta = f[5];
+        if (n >= 7 && f[6] && f[6][0] != '\0')
+            g_nav.duration = f[6];
         chronos_mark_dirty();
         return;
     }
@@ -393,17 +421,21 @@ static inline void bt_apply_bridge_line(char *line)
         memcpy(g_navIconPending + offset, chunk, sizeof(chunk));
 
         // Satu icon nav dikirim dalam 3 potongan (pos 0..2).
-        // Terapkan CRC/icon baru hanya saat semua potongan untuk CRC ini sudah lengkap,
-        // supaya render tidak "setengah icon".
+        // Di emulator, commit final diprioritaskan dari NAVICONFULL agar
+        // chunk parsial/out-of-order tidak membuat icon korup.
         g_navIconAssembleMask |= static_cast<uint8_t>(1u << static_cast<unsigned>(pos));
-
-        if (g_navIconAssembleMask == 0x07u)
+        const bool fullReady = (g_navIconAssembleMask == 0x07u);
+        if (fullReady && !BT_BRIDGE_NAVICON_REQUIRE_FULL)
         {
             memcpy(g_nav.icon, g_navIconPending, sizeof(g_nav.icon));
             g_navCrc = crc;
             g_nav.iconCRC = crc;
             g_navIconAssembleMask = 0;
             chronos_mark_dirty();
+        }
+        else if (fullReady)
+        {
+            g_navIconAssembleMask = 0;
         }
         return;
     }
